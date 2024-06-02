@@ -1,0 +1,61 @@
+import pandas as pd
+
+data = pd.read_csv("data_imputed.csv")
+data.isnull().sum()
+data.head()
+data.info()
+data = data.drop(columns = ['Unnamed: 0'])
+data['obs_date'] = pd.to_datetime(data['obs_date'])
+# Extract year for grouping
+data['year'] = data['obs_date'].dt.year
+
+# Get balanced sample data for one year, three year and five year PD models
+# One year Default Probability Model Samples
+defaulted = data[data['Default'] == 1]
+non_defaulted = data[data['Default'] == 0]
+balanced_samples = pd.DataFrame()
+
+for year, group in defaulted.groupby('year'):
+    number_of_defaults = len(group)
+    non_default_sample = non_defaulted[non_defaulted['year'] == year].sample(n=number_of_defaults, replace=True)
+    balanced_samples = pd.concat([balanced_samples, group, non_default_sample])
+
+# Save without 'Unnamed: 0'
+balanced_samples = balanced_samples.loc[:, ~balanced_samples.columns.str.contains('^Unnamed')]
+balanced_samples.to_csv('1_Year_data.csv', index=False)
+
+# 3 year and 5 year Default Probability Model Samples
+for years in [3, 5]:
+    data.sort_values(by=['ID', 'obs_date'], inplace=True)
+    data['First_Observation'] = data.groupby('ID')['obs_date'].transform('min')
+    data['Years_Since_First'] = (data['obs_date'] - data['First_Observation']).dt.total_seconds() / (365.25 * 24 * 3600)
+    data[f'Default_{years}yr'] = data.apply(lambda row: 1 if row['Default'] == 1 and row['Years_Since_First'] <= years else 0, axis=1)
+    default_status = data.groupby('ID')[f'Default_{years}yr'].max().reset_index()
+    data = data.merge(default_status, on='ID', suffixes=('', '_final'))
+    data.drop(columns=[f'Default_{years}yr', 'First_Observation', 'Years_Since_First'], inplace=True)
+    data.rename(columns={f'Default_{years}yr_final': f'Default_{years}yr'}, inplace=True)
+
+    defaulted = data[data[f'Default_{years}yr'] == 1]
+    non_defaulted = data[data[f'Default_{years}yr'] == 0]
+    balanced_samples = pd.DataFrame()
+    for year, group in defaulted.groupby('year'):
+        number_of_defaults = len(group)
+        non_default_sample = non_defaulted[non_defaulted['year'] == year].sample(n=number_of_defaults, replace=True)
+        balanced_samples = pd.concat([balanced_samples, group, non_default_sample])
+
+    # Adjust columns for saving
+    if years == 3:
+        # Exclude 'Default'
+        balanced_samples.drop(columns=['Default'], inplace=True)
+    elif years == 5:
+        # Exclude 'Default', 'Default_3yr'
+        balanced_samples.drop(columns=['Default', 'Default_3yr'], inplace=True)
+
+    balanced_samples.to_csv(f"{years}_Year_Data.csv", index=False)
+
+data_1 = pd.read_csv("1_Year_Data.csv")
+data_1.info()
+data_2 = pd.read_csv("3_Year_Data.csv")
+data_2.info()
+data_3 = pd.read_csv("5_Year_Data.csv")
+data_3.info()
