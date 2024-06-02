@@ -1,0 +1,103 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+data = pd.read_csv("data.csv")
+
+# glimpse the data
+data.info()
+data = data.rename(columns={'NA': 'Default'})
+# Convert 'obs_date' to datetime format
+data['obs_date'] = pd.to_datetime(data['obs_date'], errors='coerce')
+# Convert all columns except 'ID' and 'obs_date' to numeric
+numeric_columns = data.columns.drop(['ID', 'obs_date'])
+data[numeric_columns] = data[numeric_columns].apply(pd.to_numeric, errors='coerce')
+
+# Default Percentage
+# observe the default and nondefault percentage
+default_value_counts = data["Default"].value_counts()
+# Calculate the total count
+total_count = default_value_counts.sum()
+# Calculate the percentage of each category
+percentage = (default_value_counts / total_count) * 100
+print(percentage)  # 94.125 nondefault, 5.87default
+
+# identify missing data
+# Descriptive statistics to identify missing values
+missing_statistics = data.isnull().sum()
+
+# Create Visualization of heatmaps and bar charts to see clearly the missing values across the data
+# Visualization - Bar chart
+plt.figure(figsize=(12, 6))
+sns.barplot(x=missing_statistics.index, y=missing_statistics.values, palette='viridis')
+plt.xticks(rotation=45, ha='right')
+plt.title('Missing Values by Variable')
+plt.xlabel('Variables')
+plt.ylabel('Number of Missing Values')
+plt.show()
+
+# Visualization - Heatmap
+plt.figure(figsize=(12, 8))
+sns.heatmap(data.isnull(), cbar=False, cmap='viridis')
+plt.title('Missing Data Overview')
+plt.show()
+
+# Patterns of Missing values
+# 1 Individual Variables
+# Examine each variable separately to understand the extent and pattern of missing values
+# Individual Variable Analysis
+for column in data.columns:
+    missing_percentage = data[column].isnull().mean() * 100
+    print(f"{column}: {missing_percentage:.2f}% missing values")
+
+# Visualization - Individual Variable Analysis
+plt.figure(figsize=(14, 6))
+sns.barplot(x=data.columns, y=data.isnull().mean() * 100, palette='viridis')
+plt.xticks(rotation=45, ha='right')
+plt.title('Percentage of Missing Values in Each Variable')
+plt.xlabel('Variables')
+plt.ylabel('Percentage of Missing Values')
+plt.show()
+
+# Bivariate Analysis
+# Explore relationships between missingness in one variable and the presence of values in other varibles
+# Bivariate Analysis - Explore relationships between missingness in one variable and others
+missing_vars = data.columns[data.isnull().any()].tolist()
+
+plt.figure(figsize=(14, 8))
+sns.heatmap(data[missing_vars].isnull(), cbar=False, cmap='viridis')
+plt.title('Bivariate Analysis: Missing Data Relationships')
+plt.xlabel('Variables')
+plt.ylabel('Data Points')
+plt.show()
+
+# Correlation Analysis
+# Use correlation matrices to identify if there is a systematic relationship between missing values in different variables.
+missing_corr = data.isnull().corr()
+
+# Visualize the correlation matrix
+plt.figure(figsize=(12, 8))
+sns.heatmap(missing_corr, annot=True, cmap='coolwarm', vmin=-1, vmax=1)
+plt.title('Correlation Matrix for Missing Values')
+plt.show()
+
+# Mulitple Imputation
+# Imputing with fancyimpute
+
+from fancyimpute import IterativeImputer
+
+# Identify columns with missing values
+columns_with_missing = data.columns[data.isnull().any()].tolist()
+
+# Create a copy of the DataFrame for imputation
+data_imputed = data.copy()
+
+# Perform multiple imputation using MICE
+imputer = IterativeImputer(max_iter=5, random_state=0)  
+data_imputed[columns_with_missing] = imputer.fit_transform(data_imputed[columns_with_missing])
+
+# data_imputed now contains imputed values for columns with missing data
+data_imputed.to_csv('data_imputed.csv', index = False)
+
+data_imputed.isnull().sum()
